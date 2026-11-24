@@ -2,49 +2,50 @@ import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
-public class ServicioRMC {
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
+// RMC: recibe pedidos del GT y los manda a Persistencia
+public class ServicioRMC {
     public static void main(String[] args) {
-        String ipPersistencia = (args.length > 0) ? args[0] : "10.43.99.202";
-        int puertoPersistencia = 5560;
-        int puertoEscucha = (args.length > 1) ? Integer.parseInt(args[1]) : 5557;
+        List<String> a = new ArrayList<>(Arrays.asList(args));
+        boolean respaldo = a.remove("--respaldo");
+        boolean usarReplica = a.remove("--replica");
+        String ipPers = a.size() > 0 ? a.get(0) : "10.43.99.202";
+        int puertoEscucha = a.size() > 1 ? Integer.parseInt(a.get(1)) : 5557;
+        int puertoPing = a.size() > 2 ? Integer.parseInt(a.get(2)) : 5562;
+
+        // el respaldo espera a que caiga el principal; el principal responde los PING
+        if (respaldo) Util.esperarCaida("localhost", puertoPing, "RMC");
+        else if (puertoPing > 0) Util.iniciarPong(puertoPing, "RMC");
 
         try (ZContext context = new ZContext()) {
             ZMQ.Socket repGT = context.createSocket(SocketType.REP);
-            repGT.bind("tcp://*:" + puertoEscucha);
+            Util.bindConReintentos(repGT, "tcp://*:" + puertoEscucha);
 
-            ZMQ.Socket reqBD = context.createSocket(SocketType.REQ);
-            reqBD.connect("tcp://" + ipPersistencia + ":" + puertoPersistencia);
+            EnlaceREQ principal = new EnlaceREQ(context, "tcp://" + ipPers + ":5560", 3000);
+            EnlaceREQ replica = usarReplica ? new EnlaceREQ(context, "tcp://" + ipPers + ":5563", 3000) : principal;
 
             System.out.println("=========================================================");
-            System.out.println("   SERVICIO RMC (RESERVAS, MODIFICACIONES Y CONSULTAS)");
-            System.out.println("   Escuchando en puerto: " + puertoEscucha);
-            System.out.println("   Conectado a Persistencia: " + ipPersistencia + ":" + puertoPersistencia);
-            System.out.println("=========================================================\n");
+            System.out.println(" RMC " + (respaldo ? "(RESPALDO ACTIVO) " : "") + "- puerto " + puertoEscucha);
+            System.out.println(" Persistencia: " + ipPers + ":5560" + (usarReplica ? " | consultas -> replica :5563" : ""));
+            System.out.println("=========================================================");
 
             while (!Thread.currentThread().isInterrupted()) {
                 String peticion = repGT.recvStr(0);
                 if (peticion == null) break;
+                long t0 = System.nanoTime();
+                String[] p = peticion.split(";", -1);
+                String cmd = p.length > 2 ? p[2] : "?";
+                String usuario = p.length > 1 ? p[1] : "?";
 
-                long tiempoInicio = System.nanoTime();
-                String tipoOperacion = peticion.split(";")[0];
-                
-                System.out.println("[RMC TIEMPO REAL] Recibida peticion de " + tipoOperacion + " desde el GT.");
-                System.out.println("[RMC TRAMA] " + peticion);
+                // las consultas pueden ir a la replica, lo demas al principal
+                String resp = cmd.equals("CONSULTA") ? replica.pedir(peticion) : principal.pedir(peticion);
 
-                // Reenviar la solicitud hacia el Servicio de Persistencia (Base de Datos)
-                reqBD.send(peticion);
-                String respuestaBD = reqBD.recvStr(0);
-
-                long tiempoFin = System.nanoTime();
-                long latenciaProceso = (tiempoFin - tiempoInicio) / 1_000_000;
-
-                System.out.println("[RMC TIEMPO REAL] Respuesta obtenida de la BD en " + latenciaProceso + " ms.");
-                System.out.println("[RMC RESPUESTA] " + respuestaBD.split(";")[0]);
-                System.out.println("---------------------------------------------------------");
-
-                // Retornar la respuesta al Gestor de Transacciones
-                repGT.send(respuestaBD);
+                long ms = (System.nanoTime() - t0) / 1_000_000;
+                System.out.println("[RMC] " + cmd + " de " + usuario + " -> " + resp.split(";")[0] + " (" + ms + " ms)");
+                repGT.send(resp);
             }
         }
     }

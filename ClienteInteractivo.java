@@ -1,78 +1,66 @@
-import org.zeromq.SocketType;
-import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
 import java.util.Scanner;
 
+// Cliente por consola: menu para consultar, reservar, modificar y cancelar
 public class ClienteInteractivo {
-
     public static void main(String[] args) {
-        String ipGT = (args.length > 0) ? args[0] : "10.43.100.138";
-        int puertoGT = 5555;
+        String ipGT = args.length > 0 ? args[0] : "10.43.100.138";
+        String usuario = args.length > 1 ? args[1] : "user1";
+        Scanner sc = new Scanner(System.in);
+        String password;
+        if (args.length > 2) password = args[2];
+        else { System.out.print("Password de " + usuario + ": "); password = sc.nextLine().trim(); }
 
         System.out.println("=========================================================");
-        System.out.println("                  CLIENTE INTERACTIVO");
-        System.out.println("Conectando al Gestor de Transacciones en " + ipGT + ":" + puertoGT);
-        System.out.println("=========================================================\n");
+        System.out.println(" CLIENTE INTERACTIVO - usuario " + usuario + " - GT " + ipGT);
+        System.out.println("=========================================================");
 
-        try (ZContext context = new ZContext()) {
-            ZMQ.Socket reqSync = context.createSocket(SocketType.REQ);
-            reqSync.connect("tcp://" + ipGT + ":" + puertoGT);
-
-            Scanner scanner = new Scanner(System.in);
+        try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, password)) {
+            c.escucharNotificaciones(ipGT, msg -> System.out.println("\n>>> NOTIFICACION: " + msg));
             boolean salir = false;
-
             while (!salir) {
-                System.out.println("\n=========================================================");
-                System.out.println("                  MENU DE OPERACIONES");
-                System.out.println("=========================================================");
-                System.out.println("1. Consultar estado de eventos del mes");
-                System.out.println("2. Realizar reserva de asientos");
-                System.out.println("3. Salir del sistema");
-                System.out.println("=========================================================");
-                System.out.print("Seleccione una opcion: ");
-
-                String opcion = scanner.nextLine().trim();
-
-                switch (opcion) {
+                System.out.println("\n1. Consultar eventos de un mes   2. Reservar   3. Modificar reserva");
+                System.out.println("4. Cancelar reserva (asincrona)  5. Salir");
+                System.out.print("Opcion: ");
+                switch (sc.nextLine().trim()) {
                     case "1": {
-                        System.out.println("\n[Procesando] Enviando consulta de eventos...");
-                        reqSync.send("CONSULTA;MES");
-                        String respuesta = reqSync.recvStr(0);
-
-                        System.out.println("\n--- RESPUESTA DEL SERVIDOR ---");
-                        System.out.println(respuesta);
+                        System.out.print("Mes (1-12, 0 = todos): ");
+                        mostrar(c.solicitar("CONSULTA;" + sc.nextLine().trim()));
                         break;
                     }
-
                     case "2": {
-                        System.out.print("Ingrese el ID del Evento (Ej. E1, E2 ... E50): ");
-                        String id = scanner.nextLine().trim().toUpperCase();
-                        System.out.print("Ingrese el numero de ocurrencia del evento (1 o 2): ");
-                        String oc = scanner.nextLine().trim();
-                        System.out.print("Ingrese la cantidad de asientos a reservar: ");
-                        String cant = scanner.nextLine().trim();
-
-                        String comando = "RESERVA;" + id + ";" + oc + ";" + cant;
-                        System.out.println("\n[Procesando] Enviando solicitud de reserva: " + comando);
-                        reqSync.send(comando);
-                        String respuesta = reqSync.recvStr(0);
-
-                        System.out.println("\n--- RESPUESTA DEL SERVIDOR ---");
-                        System.out.println(respuesta);
+                        System.out.print("Evento (E1..E50): ");
+                        String ev = sc.nextLine().trim().toUpperCase();
+                        System.out.print("Ocurrencia (1 o 2): ");
+                        String oc = sc.nextLine().trim();
+                        System.out.print("Asientos: ");
+                        String n = sc.nextLine().trim();
+                        mostrar(c.solicitar("RESERVA;" + ev + ";" + oc + ";" + n));
                         break;
                     }
-
-                    case "3":
-                        salir = true;
-                        System.out.println("Finalizando la ejecucion del cliente. Hasta pronto.");
+                    case "3": {
+                        System.out.print("ID de reserva (ej. R1): ");
+                        String id = sc.nextLine().trim().toUpperCase();
+                        System.out.print("Nueva cantidad de asientos (0 = mantener): ");
+                        String n = sc.nextLine().trim();
+                        System.out.print("Nueva ocurrencia (0 = mantener, 1 o 2): ");
+                        String oc = sc.nextLine().trim();
+                        mostrar(c.solicitar("MODIFICA;" + id + ";" + n + ";" + oc));
                         break;
-
-                    default:
-                        System.out.println("Opcion no valida. Por favor intente de nuevo.");
+                    }
+                    case "4": {
+                        System.out.print("ID de reserva a cancelar (ej. R1): ");
+                        mostrar(c.cancelar(sc.nextLine().trim().toUpperCase()));
+                        System.out.println("(el resultado final llegara como notificacion)");
+                        break;
+                    }
+                    case "5": salir = true; break;
+                    default: System.out.println("Opcion no valida.");
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Error en la ejecucion del cliente: " + e.getMessage());
         }
+    }
+
+    private static void mostrar(String r) {
+        System.out.println("\n--- RESPUESTA ---\n" + r.replaceFirst(";", ": "));
     }
 }
