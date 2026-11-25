@@ -143,6 +143,20 @@ public class ServicioPersistencia {
             catch (RuntimeException e) { return "ERROR;Parametros invalidos"; }
         }
 
+        // RESET: deja los datos como al inicio (solo el usuario admin, para repetir pruebas)
+        if (cmd.equals("RESET")) {
+            if (!usuario.equals("admin")) return "RECHAZADO;Solo admin puede reiniciar los datos";
+            try {
+                inicializar();
+                cargar();
+                publicarReplica();
+                System.out.println("[BD] RESET: datos reiniciados por admin");
+                return "EXITO;Datos reiniciados";
+            } catch (IOException e) {
+                return "ERROR;No se pudo reiniciar los datos";
+            }
+        }
+
         // si la solicitud ya se proceso, se devuelve el mismo resultado
         String previo = solicitudes.get(idSol);
         if (previo != null) {
@@ -173,7 +187,8 @@ public class ServicioPersistencia {
             try { cargar(); } catch (IOException e2) { System.err.println("[BD] No se pudo recargar: " + e2.getMessage()); }
             return "RECHAZADO;Error al escribir los archivos";
         }
-        System.out.println("[BD] " + cmd + " " + usuario + " -> " + res.split(";")[0]);
+        System.out.println("[BD] " + cmd + " " + usuario + " -> " + res.split(";")[0]
+                + (cambioDatos ? "  | archivos actualizados: eventos.txt, reservas.txt, solicitudes.txt" : "  | solicitudes.txt actualizado"));
         return res;
     }
 

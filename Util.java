@@ -2,6 +2,9 @@ import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
 // Utilidades: abrir puertos y detectar si el principal cayo (PING/PONG)
 public class Util {
 
@@ -48,18 +51,22 @@ public class Util {
                 String r = req.recvStr(0);   // espera 1 s
                 if (r == null) {
                     fallos++;
-                    System.out.println("[" + nombre + " RESPALDO] Sin PONG (" + fallos + "/3)");
+                    System.out.println("[" + hora() + "] [" + nombre + " RESPALDO] PING sin respuesta (" + fallos + "/3)");
                     ctx.destroySocket(req);
                     req = nuevoReq(ctx, ipPrincipal, puertoPing);
                 } else {
                     fallos = 0;
+                    System.out.println("[" + hora() + "] [" + nombre + " RESPALDO] PING -> PONG ok, el principal esta activo");
                 }
                 Thread.sleep(2000);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        System.out.println("[" + nombre + " RESPALDO] PRINCIPAL CAIDO. Asumiendo su funcion...");
+        System.out.println("\n##################################################");
+        System.out.println("# [" + hora() + "] " + nombre + " PRINCIPAL CAIDO");
+        System.out.println("# El respaldo toma sus puertos y atiende desde ahora");
+        System.out.println("##################################################\n");
     }
 
     private static ZMQ.Socket nuevoReq(ZContext ctx, String ip, int puerto) {
@@ -69,5 +76,10 @@ public class Util {
         s.setLinger(0);
         s.connect("tcp://" + ip + ":" + puerto);
         return s;
+    }
+
+    // hora actual para los mensajes
+    static String hora() {
+        return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
     }
 }
