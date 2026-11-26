@@ -1,36 +1,13 @@
-# Proyecto Distribuidos: reserva de boletos con ZeroMQ
+# Proyecto Distribuidos: reserva de boletos
 
-Sistema en Java (JeroMQ) para consultar, reservar, modificar y cancelar boletos. Corre en 3 máquinas virtuales. Tiene una arquitectura base y una escalable, y sigue funcionando si se cae el GT o el RMC porque cada uno tiene un respaldo.
+VMs:
+- 10.43.99.202: Persistencia (guarda los datos en archivos .txt)
+- 10.43.100.138: GT, RMC, Cancelaciones y respaldos
+- 10.43.100.39: clientes y pruebas
 
-## Las VMs
+Los usuarios son user1 a user8, sin clave. El usuario admin solo lo usan las pruebas para reiniciar los datos y leer los contadores del GT. Los 50 eventos están en el mes 12 (diciembre de 2026). Puertos 5555 a 5565 abiertos entre las VMs. Diagrama de la arquitectura: diagrama_arquitectura_final.png
 
-- **10.43.99.202**: almacenamiento. Corre Persistencia, que guarda los datos en archivos `.txt` dentro de `datos/`.
-- **10.43.100.138**: negocio. Corre el GT (Gestor de Transacciones), el RMC, el servicio de Cancelaciones y los respaldos del GT y del RMC. En la arquitectura escalable también corren dos RMC adicionales.
-- **10.43.100.39**: clientes. Corre el cliente interactivo, el cliente masivo y las pruebas de carga.
-
-Los puertos 5555 a 5565 deben estar abiertos entre las VMs. Los usuarios de prueba son `user1` a `user8` con clave `clave1` a `clave8`, y `admin` con clave `admin123` (solo para reiniciar los datos y leer los contadores del GT en las pruebas).
-
-Los 50 eventos (E1 a E50) están en diciembre de 2026: 20 tienen dos ocurrencias y 30 una, con 100 asientos cada una. Para consultarlos se usa el mes 12. El diagrama de la arquitectura final está en `diagrama_arquitectura_final.png`.
-
-## 1. Requisitos (en las 3 VMs)
-
-Revisa que haya Java 17 o mayor:
-
-```bash
-java -version
-javac -version
-```
-
-Si falta algo:
-
-```bash
-sudo apt update
-sudo apt install -y openjdk-17-jdk curl wget netcat-openbsd procps bsdextrautils
-```
-
-Si la VM no tiene internet, descarga `jeromq-0.5.3.jar` en tu PC desde `https://repo1.maven.org/maven2/org/zeromq/jeromq/0.5.3/jeromq-0.5.3.jar` y cópialo a la carpeta del proyecto en cada VM.
-
-## 2. Limpiar y compilar (en las 3 VMs)
+## 0. Preparar (en las 3 VMs)
 
 ```bash
 cd ~/Downloads/Proyecto-Distribuidos-main
@@ -41,203 +18,149 @@ chmod +x *.sh
 ./compilar.sh
 ```
 
-Debe terminar con `Compilacion OK -> ./out`.
+Compila el código y deja la carpeta `out/`. Requiere Java 17 (`sudo apt install -y openjdk-17-jdk curl wget netcat-openbsd procps`). Si la VM no tiene internet, copia `jeromq-0.5.3.jar` a la carpeta del proyecto.
 
-## 3. Levantar la arquitectura base
+## 1. Arquitectura base
 
-Hazlo en este orden.
-
-### VM 10.43.99.202 (almacenamiento)
-
-Terminal A:
+VM 10.43.99.202, terminal A:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
 ./nodo2.sh --reset
 ```
 
-Terminal B:
+Arranca Persistencia con los datos iniciales. Deja `datos/eventos.txt`, `datos/reservas.txt` y `datos/solicitudes.txt`.
+
+VM 10.43.99.202, terminal B:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
 ./ver_archivos.sh
 ```
 
-Terminal A muestra el estado inicial (50 eventos, 7000 asientos libres, 0 reservas) y cada operación que llega. Terminal B muestra los archivos de datos cambiando en vivo.
+Muestra los archivos de datos cambiando en vivo.
 
-### VM 10.43.100.138 (negocio)
-
-Terminal A:
+VM 10.43.100.138, terminal A:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
 nc -zv 10.43.99.202 5560
-./crear_usuarios.sh
 DEMO=1 ./nodo1.sh start base
 ./nodo1.sh status
 ```
 
-Deben aparecer 5 procesos `activo`: cancelaciones, rmc, rmc_respaldo, gt y gt_respaldo.
+Arranca Cancelaciones, RMC, RMC respaldo, GT y GT respaldo. Deja `logs/*.log` y `logs/*.pid`. Deben salir 5 procesos activos.
 
-Terminal B:
+VM 10.43.100.138, terminal B:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
 ./ver_logs.sh
 ```
 
-### VM 10.43.100.39 (clientes)
+Muestra los logs de todos los procesos.
+
+## 2. Prueba manual
+
+VM 10.43.100.39:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
 nc -zv 10.43.100.138 5555
+java -cp out:jeromq-0.5.3.jar ClienteInteractivo 10.43.100.138 user1
 ```
 
-## 4. Levantar la arquitectura escalable
+Abre un menú para consultar (mes 12), reservar, modificar y cancelar. La cancelación responde un ACK y luego llega una notificación. Cambia `datos/` en la VM 10.43.99.202.
 
-En la VM 10.43.100.138:
+## 3. Carga con el cliente masivo
 
-```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
-./nodo1.sh stop
-DEMO=1 ./nodo1.sh start escalable
-./nodo1.sh status
-```
-
-Deben aparecer 7 procesos `activo`: los de la arquitectura base más rmc2 y rmc3. En esta arquitectura el GT reparte las solicitudes entre los tres RMC y las consultas se atienden en la réplica de lectura de Persistencia (puerto 5563) en la VM 10.43.99.202.
-
-Para volver a la arquitectura base: `./nodo1.sh stop` y `DEMO=1 ./nodo1.sh start base`.
-
-## 5. Prueba funcional (VM 10.43.100.39)
-
-```bash
-java -cp out:jeromq-0.5.3.jar ClienteInteractivo 10.43.100.138 user1 clave1
-```
-
-Prueba en este orden: consultar el mes 12, reservar `E1` ocurrencia 1 con 2 asientos, modificar la reserva `R1` a 5 asientos y ocurrencia 2, y cancelarla. La cancelación devuelve un ACK y después llega una notificación con el resultado. En la VM 10.43.99.202 se ven los archivos cambiar en cada paso. Un evento con una sola ocurrencia (por ejemplo `E30`) rechaza el cambio de fecha y solo admite cambiar el número de asientos.
-
-## 6. Cliente masivo (VM 10.43.100.39)
-
-```bash
-java -cp out:jeromq-0.5.3.jar ClienteMasivo --ip 10.43.100.138 --clientes 8 --duracion 60 --rpm 40 --reset
-```
-
-Sin argumentos muestra todas las opciones: `--clientes`, `--duracion`, `--rpm`, `--consultas`, `--reservas`, `--modificaciones`, `--cancelaciones` (suman 100), `--mes`, `--salida`, `--config` y `--reset`. La mitad de los clientes, redondeada hacia arriba, solo hace consultas; el resto hace las operaciones mixtas.
-
-## 7. Experimentos de rendimiento
-
-Los escenarios están en la carpeta `pruebas/` y siguen la Tabla 1 del enunciado. Con 3 clientes, 2 hacen solo consultas y el tercero consultas y reservas. Con 5 y 8 clientes, la mitad (redondeada hacia arriba) hace solo consultas y el resto reservas y modificaciones. Cada cliente envía 30 solicitudes por minuto y cada escenario dura 150 segundos.
-
-### Especificaciones de las VMs
-
-En cada una de las 3 VMs:
-
-```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
-./especificaciones.sh
-```
-
-### Arquitectura base
-
-En la VM 10.43.100.138 debe estar corriendo la arquitectura base (punto 3). Luego, en la VM 10.43.100.39:
-
-```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
-./prueba_velocidad.sh 10.43.100.138 150 base
-```
-
-### Arquitectura escalable
-
-En la VM 10.43.100.138 levanta la arquitectura escalable (punto 4). Luego, en la VM 10.43.100.39:
-
-```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
-./prueba_velocidad.sh 10.43.100.138 150 escalable
-```
-
-Cada ejecución tarda unos 9 minutos y deja una carpeta `resultados/base_<fecha>` o `resultados/escalable_<fecha>` con:
-
-- `resumen_velocidad.csv`: tiempo promedio, desviación estándar y máximo de cada tipo de operación, medidos en los clientes.
-- `resumen_tpm_gt.csv`: transacciones por minuto de cada tipo, medidas en el GT.
-- `tiempos_N_clientes.csv`: el tiempo de cada operación.
-- `consola_N_clientes.txt`: lo que salió en pantalla.
-
-### Gráficos y tabla comparativa
-
-Con las dos carpetas de resultados copiadas a un equipo que tenga Python y matplotlib (`pip install matplotlib`):
-
-```bash
-python3 graficar.py resultados/base_<fecha> resultados/escalable_<fecha> graficos
-```
-
-Genera los gráficos de tiempo de respuesta y de TPM por número de clientes, comparando base y escalable (`comparacion_completa.png` y uno por métrica), y `tabla_comparativa.csv` con el cambio porcentual.
-
-Para copiar los resultados desde la VM de clientes a tu PC:
-
-```bash
-scp -r estudiante@10.43.100.39:~/Downloads/Proyecto-Distribuidos-main/resultados .
-```
-
-### Prueba de estrés
-
-```bash
-./prueba_estres.sh 10.43.100.138
-```
-
-## 8. Prueba de fallo
-
-Con el sistema levantado como en el punto 3 o el 4, haz lo siguiente.
-
-### VM 10.43.100.39: lanzar la carga
+VM 10.43.100.39:
 
 ```bash
 java -cp out:jeromq-0.5.3.jar ClienteMasivo --ip 10.43.100.138 --clientes 5 --duracion 120 --reset
 ```
 
-### VM 10.43.100.138: matar el GT (a los 30 segundos)
+Lanza los clientes en paralelo. Deja en la carpeta actual `tiempos_5_clientes.csv` (cada operación), `metricas_5_clientes.csv` (promedio, desviación y TPM) y `tpm_gt_5_clientes.csv` (TPM medido en el GT). Sin argumentos muestra todas las opciones.
 
-En una terminal nueva:
+## 4. Falla del GT y del RMC
+
+VM 10.43.100.39:
 
 ```bash
-cd ~/Downloads/Proyecto-Distribuidos-main
+java -cp out:jeromq-0.5.3.jar ClienteMasivo --ip 10.43.100.138 --clientes 5 --duracion 120 --reset
+```
+
+A los 30 segundos, VM 10.43.100.138, terminal C:
+
+```bash
 ./nodo1.sh kill gt
 ./nodo1.sh status
 ```
 
-Esto mata de verdad el proceso del GT con `kill -9`. Lo que debe verse:
+Mata el GT con `kill -9`. El respaldo detecta la caída en unos 6 segundos, abre los puertos y atiende. En `ver_logs.sh` se ven los PING sin respuesta y el aviso de caída. En la VM 10.43.100.39 salen mensajes de reintento y la carga sigue.
 
-- En la VM 10.43.100.138, en `ver_logs.sh`: el log del GT principal se congela. El respaldo muestra tres `PING sin respuesta`, un cuadro `PRINCIPAL CAIDO` y empieza a atender.
-- En la VM 10.43.100.39: uno o dos mensajes `Reintento 1/3` y la carga continúa sola.
-- En la VM 10.43.99.202: los archivos siguen cambiando, el estado no se perdió.
-
-### VM 10.43.100.138: matar el RMC
+Después:
 
 ```bash
 ./nodo1.sh kill rmc
 tail -f logs/rmc_respaldo.log
 ```
 
-### VM 10.43.100.39: ver las operaciones afectadas
+Mata el RMC y el respaldo lo reemplaza.
 
-Cuando termine la carga:
+VM 10.43.100.39, al terminar la carga:
 
 ```bash
 ./picos_falla.sh tiempos_5_clientes.csv
 ```
 
-Lista las operaciones que tardaron más de 4000 ms, que son las afectadas por la caída.
+Lista las operaciones que tardaron más de 4000 ms, las afectadas por la caída.
 
-### VM 10.43.99.202: verificar que no hubo sobreventa
+VM 10.43.99.202: Ctrl+C en la terminal A. Imprime el resumen final y la línea de integridad, que debe decir OK.
 
-Presiona Ctrl+C en la terminal A de `nodo2.sh`. Debe aparecer `Integridad (sin sobreventa, ocupados = reservas): OK`.
+## 5. Arquitectura escalable
 
-### Repetir la demo (VM 10.43.100.138)
+VM 10.43.100.138:
 
 ```bash
 ./nodo1.sh stop
-DEMO=1 ./nodo1.sh start base
+DEMO=1 ./nodo1.sh start escalable
+./nodo1.sh status
 ```
 
-Cómo funciona el reemplazo: el proceso principal responde `PONG` a los `PING` de su respaldo. Si fallan 3 `PING` seguidos (unos 6 segundos), el respaldo abre los puertos del principal y atiende. Los clientes reintentan lo que se perdió con el mismo identificador, y Persistencia no aplica dos veces una operación repetida.
+Arranca los procesos de la arquitectura base y dos RMC más. Deben salir 7 procesos activos. Las consultas pasan por la réplica de Persistencia. Para volver a la base: `./nodo1.sh stop` y `DEMO=1 ./nodo1.sh start base`.
 
-Limitación: los respaldos corren en la misma VM que el principal, y si se cae la VM 10.43.99.202 nada reemplaza a Persistencia.
+## 6. Experimentos
+
+En las 3 VMs:
+
+```bash
+./especificaciones.sh
+```
+
+Deja `especificaciones_<nombre>.txt` en cada VM.
+
+Con la arquitectura base corriendo, VM 10.43.100.39:
+
+```bash
+./prueba_velocidad.sh 10.43.100.138 150 base
+```
+
+Con la arquitectura escalable corriendo, VM 10.43.100.39:
+
+```bash
+./prueba_velocidad.sh 10.43.100.138 150 escalable
+```
+
+Cada una corre 3, 5 y 8 clientes (unos 9 minutos) y deja `resultados/base_<fecha>/` o `resultados/escalable_<fecha>/` con `resumen_velocidad.csv` (tiempos), `resumen_tpm_gt.csv` (TPM del GT) y los CSV de cada escenario.
+
+## 7. Gráficos
+
+Copiar los resultados a tu PC:
+
+```bash
+scp -r estudiante@10.43.100.39:~/Downloads/Proyecto-Distribuidos-main/resultados .
+```
+
+Generar los gráficos (necesita `pip install matplotlib`):
+
+```bash
+python3 graficar.py resultados/base_<fecha> resultados/escalable_<fecha> graficos
+```
+
+Deja los gráficos de tiempo y TPM por número de clientes y `tabla_comparativa.csv`.

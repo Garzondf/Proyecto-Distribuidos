@@ -19,7 +19,6 @@ public class ClienteMasivo {
         System.out.println("  --mes M              mes que se consulta, donde estan los eventos (por defecto 12)");
         System.out.println("  --salida carpeta     carpeta donde se guardan los CSV       (por defecto .)");
         System.out.println("  --reset              reinicia los datos de Persistencia antes de empezar");
-        System.out.println("  --admin-pass clave   clave del usuario admin para --reset   (por defecto admin123)");
         System.out.println("Los porcentajes deben sumar 100.");
         System.out.println("Ejemplo: java -cp out:jeromq-0.5.3.jar ClienteMasivo --ip 10.43.100.138 --clientes 8 --duracion 60 --reset");
     }
@@ -64,7 +63,6 @@ public class ClienteMasivo {
             case "--cancelaciones": return "porcentajeCancelaciones";
             case "--mes": return "mesConsulta";
             case "--salida": return "salida";
-            case "--admin-pass": return "adminPass";
             default: return null;
         }
     }

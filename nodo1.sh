@@ -10,7 +10,6 @@ lanzar() { nohup java -cp "$CP" "${@:2}" > "logs/$1.log" 2>&1 & echo $! > "logs/
 case "$1" in
 start)
   MODO=${2:-base}
-  [ -f usuarios.txt ] || ./crear_usuarios.sh > /dev/null
   echo "Iniciando Nodo 1 en modo $MODO (Persistencia en $IP_PERS)"
   lanzar cancelaciones ServicioCancelaciones "$IP_PERS"
   if [ "$MODO" = "escalable" ]; then
@@ -26,9 +25,9 @@ start)
     lanzar rmc_respaldo ServicioRMC "$IP_PERS" 5557 5562 --respaldo
     RMCS="localhost:5557"
   fi
-  lanzar gt GestorTransacciones "$RMCS" localhost usuarios.txt $DEMO_FLAG
+  lanzar gt GestorTransacciones "$RMCS" localhost $DEMO_FLAG
   sleep 2
-  lanzar gt_respaldo GestorTransacciones "$RMCS" localhost usuarios.txt --respaldo $DEMO_FLAG
+  lanzar gt_respaldo GestorTransacciones "$RMCS" localhost --respaldo $DEMO_FLAG
   echo "Logs en ./logs (tail -f logs/gt.log)"
   ;;
 stop)

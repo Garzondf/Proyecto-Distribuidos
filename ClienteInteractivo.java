@@ -2,20 +2,17 @@ import java.util.Scanner;
 
 // Cliente por consola: menu para consultar, reservar, modificar y cancelar
 public class ClienteInteractivo {
-    // pide usuario y clave y muestra el menu
+    // muestra el menu para el usuario indicado
     public static void main(String[] args) {
         String ipGT = args.length > 0 ? args[0] : "10.43.100.138";
         String usuario = args.length > 1 ? args[1] : "user1";
         Scanner sc = new Scanner(System.in);
-        String password;
-        if (args.length > 2) password = args[2];
-        else { System.out.print("Password de " + usuario + ": "); password = sc.nextLine().trim(); }
 
         System.out.println("=========================================================");
         System.out.println(" CLIENTE INTERACTIVO - usuario " + usuario + " - GT " + ipGT);
         System.out.println("=========================================================");
 
-        try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, password)) {
+        try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario)) {
             c.escucharNotificaciones(ipGT, msg -> System.out.println("\n>>> NOTIFICACION: " + msg));
             boolean salir = false;
             while (!salir) {

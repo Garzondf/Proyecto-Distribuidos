@@ -11,14 +11,14 @@ public class ClienteBase implements AutoCloseable {
     public static final int REINTENTOS = 3;
 
     private final ZContext ctx = new ZContext();
-    private final String ip, usuario, password;
+    private final String ip, usuario;
     private final int puertoSync, puertoCancel;
     private ZMQ.Socket req, dealer;
 
     // crea los sockets hacia el GT (5555 consultas/reservas, 5556 cancelaciones)
-    public ClienteBase(String ip, int puertoSync, int puertoCancel, String usuario, String password) {
+    public ClienteBase(String ip, int puertoSync, int puertoCancel, String usuario) {
         this.ip = ip; this.puertoSync = puertoSync; this.puertoCancel = puertoCancel;
-        this.usuario = usuario; this.password = password;
+        this.usuario = usuario;
         req = abrirReq();
         dealer = abrirDealer();
     }
@@ -48,7 +48,7 @@ public class ClienteBase implements AutoCloseable {
 
     // Envia una solicitud al GT (ej. "RESERVA;E3;1;2") y espera la respuesta
     public String solicitar(String comando) {
-        String payload = nuevoId() + ";" + usuario + ";" + password + ";" + comando;
+        String payload = nuevoId() + ";" + usuario + ";" + comando;
         for (int intento = 0; intento <= REINTENTOS; intento++) {
             req.send(payload);
             String r = req.recvStr(0);
@@ -64,7 +64,7 @@ public class ClienteBase implements AutoCloseable {
 
     // Envia la cancelacion; aqui solo llega el ACK, el resultado llega por notificacion
     public String cancelar(String idReserva) {
-        String payload = nuevoId() + ";" + usuario + ";" + password + ";CANCELA;" + idReserva;
+        String payload = nuevoId() + ";" + usuario + ";CANCELA;" + idReserva;
         for (int intento = 0; intento <= REINTENTOS; intento++) {
             dealer.send(payload);
             String r = dealer.recvStr(0);

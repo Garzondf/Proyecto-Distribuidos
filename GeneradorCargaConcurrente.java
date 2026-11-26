@@ -38,7 +38,6 @@ public class GeneradorCargaConcurrente {
         int mes = Integer.parseInt(cfg.getProperty("mesConsulta", "12"));   // mes donde estan los 50 eventos
         String salida = cfg.getProperty("salida", ".");
         boolean resetAntes = Boolean.parseBoolean(cfg.getProperty("resetAntes", "false"));
-        String adminPass = cfg.getProperty("adminPass", "admin123");
         long intervaloMs = 60_000L / reqMin;
 
         if (pctCons + pctRes + pctMod + pctCanc != 100) {
@@ -56,13 +55,13 @@ public class GeneradorCargaConcurrente {
 
         // deja los datos como al inicio antes de medir
         if (resetAntes) {
-            try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin", adminPass)) {
+            try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin")) {
                 System.out.println("[RESET] " + admin.solicitar("RESET"));
             }
         }
 
         // pone en cero los contadores del GT para medir solo esta prueba
-        estadisticasGT(ipGT, adminPass);
+        estadisticasGT(ipGT);
         AtomicInteger notificaciones = new AtomicInteger();
 
         List<Registro> registros = Collections.synchronizedList(new ArrayList<>());
@@ -73,13 +72,12 @@ public class GeneradorCargaConcurrente {
             final int idx = i;
             final int numUsuario = ((i - 1) % 8) + 1;
             final String usuario = "user" + numUsuario;
-            final String password = cfg.getProperty("password." + usuario, "clave" + numUsuario);
             final boolean soloConsultas = i <= Math.ceil(n / 2.0);   // la mitad solo consulta
 
             new Thread(() -> {
                 Random rnd = new Random();
                 List<String> misReservas = new ArrayList<>();
-                try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, password)) {
+                try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario)) {
                     // si hay cancelaciones, el cliente cuenta las notificaciones que le llegan
                     if (pctCanc > 0 && !soloConsultas) c.escucharNotificaciones(ipGT, m -> notificaciones.incrementAndGet());
                     long t0Hilo = System.currentTimeMillis();
@@ -126,15 +124,15 @@ public class GeneradorCargaConcurrente {
 
         fin.await();
         double minutos = (System.currentTimeMillis() - inicioGlobal) / 60000.0;
-        String statsGT = estadisticasGT(ipGT, adminPass);   // contadores del GT durante la prueba
+        String statsGT = estadisticasGT(ipGT);   // contadores del GT durante la prueba
         reportar(registros, n, minutos, salida);
         reportarGT(statsGT, n, salida);
         if (pctCanc > 0) System.out.println("Notificaciones de cancelacion recibidas: " + notificaciones.get());
     }
 
     // pide al GT sus contadores (y los reinicia). Devuelve null si no se pudo
-    private static String estadisticasGT(String ipGT, String adminPass) {
-        try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin", adminPass)) {
+    private static String estadisticasGT(String ipGT) {
+        try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin")) {
             String r = admin.solicitar("STATS");
             return r.startsWith("EXITO") ? r : null;
         } catch (Exception e) {

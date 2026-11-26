@@ -8,11 +8,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-// Gestor de transacciones: valida al usuario y manda cada pedido al RMC (o a Cancelaciones)
+// Gestor de transacciones: recibe los pedidos y los manda al RMC (o a Cancelaciones)
 public class GestorTransacciones {
 
     private static final AtomicInteger consultas = new AtomicInteger();
@@ -34,13 +33,9 @@ public class GestorTransacciones {
         boolean demo = a.remove("--demo");
         String rmcs = a.size() > 0 ? a.get(0) : "localhost:5557";
         String ipCanc = a.size() > 1 ? a.get(1) : "localhost";
-        String rutaUsuarios = a.size() > 2 ? a.get(2) : "usuarios.txt";
 
         if (respaldo) Util.esperarCaida("localhost", 5561, "GT");
         else Util.iniciarPong(5561, "GT");
-
-        Map<String, String> usuarios = Seguridad.cargarUsuarios(rutaUsuarios);
-        System.out.println("[GT] Usuarios cargados: " + usuarios.size());
 
         iniciarMonitorTPM();
         if (demo) iniciarResumenDemo(respaldo ? "GT RESPALDO" : "GT");
@@ -81,13 +76,13 @@ public class GestorTransacciones {
                     m.pop();               // frame vacio del REQ
                     String payload = m.popString();
                     String[] p = payload == null ? new String[0] : payload.split(";", -1);
-                    if (p.length < 4 || !Seguridad.validar(usuarios, p[1], p[2])) {
-                        System.out.println("[GT] Solicitud rechazada: credenciales invalidas");
+                    if (p.length < 3 || p[1].isEmpty()) {
+                        System.out.println("[GT] Solicitud rechazada: mal formada");
                         totRechazadas.incrementAndGet();
-                        responder(front, id, true, "ERROR;Credenciales invalidas");
+                        responder(front, id, true, "ERROR;Solicitud mal formada");
                         continue;
                     }
-                    String cmd = p[3];
+                    String cmd = p[2];
                     // STATS: el admin pide los contadores de la ventana de medicion (no se reenvia)
                     if (cmd.equals("STATS")) {
                         responder(front, id, true, p[1].equals("admin") ? estadisticas() : "ERROR;Solo admin");
@@ -117,9 +112,9 @@ public class GestorTransacciones {
                     ZFrame id = m.pop();
                     String payload = m.popString();
                     String[] p = payload == null ? new String[0] : payload.split(";", -1);
-                    if (p.length < 5 || !Seguridad.validar(usuarios, p[1], p[2]) || !p[3].equals("CANCELA")) {
-                        System.out.println("[GT] Cancelacion rechazada (credenciales o formato)");
-                        responder(canc, id, false, "ERROR;Credenciales invalidas");
+                    if (p.length < 4 || p[1].isEmpty() || !p[2].equals("CANCELA")) {
+                        System.out.println("[GT] Cancelacion rechazada (mal formada)");
+                        responder(canc, id, false, "ERROR;Solicitud mal formada");
                         continue;
                     }
                     boolean enviado = push.send(reenvio(p));
@@ -137,11 +132,9 @@ public class GestorTransacciones {
         }
     }
 
-    // arma el mensaje sin la clave
+    // el mensaje ya viene como idSolicitud;usuario;COMANDO;args
     private static String reenvio(String[] p) {
-        StringBuilder sb = new StringBuilder(p[0]).append(';').append(p[1]);
-        for (int i = 3; i < p.length; i++) sb.append(';').append(p[i]);
-        return sb.toString();
+        return String.join(";", p);
     }
 
     // responde al cliente que envio el pedido
@@ -180,7 +173,7 @@ public class GestorTransacciones {
                     Thread.sleep(5000);
                     System.out.println("##### [" + nombre + "] TRANSACCIONES ATENDIDAS: consultas=" + totC.get()
                             + " reservas=" + totR.get() + " modificaciones=" + totM.get()
-                            + " cancelaciones=" + totX.get() + " rechazadas(auth)=" + totRechazadas.get() + " #####");
+                            + " cancelaciones=" + totX.get() + " rechazadas=" + totRechazadas.get() + " #####");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
