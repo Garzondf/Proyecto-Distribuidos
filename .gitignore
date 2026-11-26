@@ -1,0 +1,7 @@
+usuarios.txt
+credenciales_clientes.properties
+out/
+logs/
+datos/
+resultados/
+*.jar

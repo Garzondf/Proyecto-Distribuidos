@@ -11,14 +11,14 @@ public class ClienteBase implements AutoCloseable {
     public static final int REINTENTOS = 3;
 
     private final ZContext ctx = new ZContext();
-    private final String ip, usuario;
+    private final String ip, usuario, clave;
     private final int puertoSync, puertoCancel;
     private ZMQ.Socket req, dealer;
 
     // crea los sockets hacia el GT (5555 consultas/reservas, 5556 cancelaciones)
-    public ClienteBase(String ip, int puertoSync, int puertoCancel, String usuario) {
+    public ClienteBase(String ip, int puertoSync, int puertoCancel, String usuario, String clave) {
         this.ip = ip; this.puertoSync = puertoSync; this.puertoCancel = puertoCancel;
-        this.usuario = usuario;
+        this.usuario = usuario; this.clave = clave;
         req = abrirReq();
         dealer = abrirDealer();
     }
@@ -46,9 +46,9 @@ public class ClienteBase implements AutoCloseable {
         return usuario + "-" + UUID.randomUUID().toString().substring(0, 12);
     }
 
-    // Envia una solicitud al GT (ej. "RESERVA;E3;1;2") y espera la respuesta
+    // Envia una solicitud al GT (ej. "RESERVA;E3;1;2") con usuario y clave, y espera la respuesta
     public String solicitar(String comando) {
-        String payload = nuevoId() + ";" + usuario + ";" + comando;
+        String payload = nuevoId() + ";" + usuario + ";" + clave + ";" + comando;
         for (int intento = 0; intento <= REINTENTOS; intento++) {
             req.send(payload);
             String r = req.recvStr(0);
@@ -64,7 +64,7 @@ public class ClienteBase implements AutoCloseable {
 
     // Envia la cancelacion; aqui solo llega el ACK, el resultado llega por notificacion
     public String cancelar(String idReserva) {
-        String payload = nuevoId() + ";" + usuario + ";CANCELA;" + idReserva;
+        String payload = nuevoId() + ";" + usuario + ";" + clave + ";CANCELA;" + idReserva;
         for (int intento = 0; intento <= REINTENTOS; intento++) {
             dealer.send(payload);
             String r = dealer.recvStr(0);

@@ -7,12 +7,17 @@ public class ClienteInteractivo {
         String ipGT = args.length > 0 ? args[0] : "10.43.100.138";
         String usuario = args.length > 1 ? args[1] : "user1";
         Scanner sc = new Scanner(System.in);
+        // la clave se toma del tercer argumento o se pide por consola
+        String clave;
+        if (args.length > 2) clave = args[2];
+        else if (System.console() != null) clave = new String(System.console().readPassword("Clave de " + usuario + ": "));
+        else { System.out.print("Clave de " + usuario + ": "); clave = sc.nextLine(); }
 
         System.out.println("=========================================================");
         System.out.println(" CLIENTE INTERACTIVO - usuario " + usuario + " - GT " + ipGT);
         System.out.println("=========================================================");
 
-        try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario)) {
+        try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, clave)) {
             c.escucharNotificaciones(ipGT, msg -> System.out.println("\n>>> NOTIFICACION: " + msg));
             boolean salir = false;
             while (!salir) {

@@ -5,6 +5,8 @@ DEMO_FLAG=${DEMO:+--demo}
 IP_PERS=${IP_PERSISTENCIA:-10.43.99.202}
 CP="out:jeromq-0.5.3.jar"
 mkdir -p logs
+# usuarios.txt (usuario:hash) lo lee el GT; se crea si no existe
+[ -f usuarios.txt ] || java -cp out GenerarUsuarios
 lanzar() { nohup java -cp "$CP" "${@:2}" > "logs/$1.log" 2>&1 & echo $! > "logs/$1.pid"; echo "  iniciado $1 (pid $!)"; }
 
 case "$1" in

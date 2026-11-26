@@ -34,6 +34,15 @@ public class GestorTransacciones {
         String rmcs = a.size() > 0 ? a.get(0) : "localhost:5557";
         String ipCanc = a.size() > 1 ? a.get(1) : "localhost";
 
+        // usuarios y hashes de contrasena (usuarios.txt); el GT valida cada solicitud antes de reenviarla
+        final Autenticador auth;
+        try {
+            auth = new Autenticador("usuarios.txt");
+        } catch (IOException e) {
+            System.err.println("[GT] No se pudo leer usuarios.txt (ejecute: java -cp out GenerarUsuarios): " + e.getMessage());
+            return;
+        }
+
         if (respaldo) Util.esperarCaida("localhost", 5561, "GT");
         else Util.iniciarPong(5561, "GT");
 
@@ -76,12 +85,20 @@ public class GestorTransacciones {
                     m.pop();               // frame vacio del REQ
                     String payload = m.popString();
                     String[] p = payload == null ? new String[0] : payload.split(";", -1);
-                    if (p.length < 3 || p[1].isEmpty()) {
+                    // formato del cliente: idSolicitud;usuario;clave;COMANDO;args
+                    if (p.length < 4 || p[1].isEmpty()) {
                         System.out.println("[GT] Solicitud rechazada: mal formada");
                         totRechazadas.incrementAndGet();
                         responder(front, id, true, "ERROR;Solicitud mal formada");
                         continue;
                     }
+                    if (!auth.validar(p[1], p[2])) {
+                        System.out.println("[GT] Solicitud rechazada: credenciales invalidas (usuario " + p[1] + ")");
+                        totRechazadas.incrementAndGet();
+                        responder(front, id, true, "ERROR;Credenciales invalidas");
+                        continue;
+                    }
+                    p = sinClave(p);   // los demas servicios reciben idSolicitud;usuario;COMANDO;args
                     String cmd = p[2];
                     // STATS: el admin pide los contadores de la ventana de medicion (no se reenvia)
                     if (cmd.equals("STATS")) {
@@ -112,11 +129,18 @@ public class GestorTransacciones {
                     ZFrame id = m.pop();
                     String payload = m.popString();
                     String[] p = payload == null ? new String[0] : payload.split(";", -1);
-                    if (p.length < 4 || p[1].isEmpty() || !p[2].equals("CANCELA")) {
+                    if (p.length < 5 || p[1].isEmpty() || !p[3].equals("CANCELA")) {
                         System.out.println("[GT] Cancelacion rechazada (mal formada)");
                         responder(canc, id, false, "ERROR;Solicitud mal formada");
                         continue;
                     }
+                    if (!auth.validar(p[1], p[2])) {
+                        System.out.println("[GT] Cancelacion rechazada: credenciales invalidas (usuario " + p[1] + ")");
+                        totRechazadas.incrementAndGet();
+                        responder(canc, id, false, "ERROR;Credenciales invalidas");
+                        continue;
+                    }
+                    p = sinClave(p);
                     boolean enviado = push.send(reenvio(p));
                     if (enviado) {
                         cancelaciones.incrementAndGet();
@@ -130,6 +154,14 @@ public class GestorTransacciones {
                 }
             }
         }
+    }
+
+    // quita la clave (posicion 2) para que no viaje a los demas servicios
+    private static String[] sinClave(String[] p) {
+        String[] r = new String[p.length - 1];
+        r[0] = p[0]; r[1] = p[1];
+        System.arraycopy(p, 3, r, 2, p.length - 3);
+        return r;
     }
 
     // el mensaje ya viene como idSolicitud;usuario;COMANDO;args

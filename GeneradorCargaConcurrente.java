@@ -13,6 +13,17 @@ public class GeneradorCargaConcurrente {
 
     record Registro(int cliente, String usuario, String tipo, long ms, String resultado, long instanteMs) {}
 
+    // contrasenas de prueba de cada usuario (credenciales_clientes.properties, generado por GenerarUsuarios)
+    private static final Properties CREDENCIALES = new Properties();
+
+    private static void cargarCredenciales() throws IOException {
+        File f = new File("credenciales_clientes.properties");
+        if (!f.exists()) GenerarUsuarios.main(new String[0]);
+        try (FileInputStream in = new FileInputStream(f)) { CREDENCIALES.load(in); }
+    }
+
+    private static String clave(String usuario) { return CREDENCIALES.getProperty(usuario, ""); }
+
     private static final Pattern ID_RESERVA = Pattern.compile("idReserva=(R\\d+)");
 
     // uso: java GeneradorCargaConcurrente [config.properties] [carpetaSalida]
@@ -45,6 +56,7 @@ public class GeneradorCargaConcurrente {
             return;
         }
         new File(salida).mkdirs();
+        cargarCredenciales();
 
         System.out.println("=========================================================");
         System.out.println(" PRUEBA DE CARGA - " + n + " clientes, " + duracion + " s, " + reqMin + " sol/min por cliente");
@@ -55,7 +67,7 @@ public class GeneradorCargaConcurrente {
 
         // deja los datos como al inicio antes de medir
         if (resetAntes) {
-            try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin")) {
+            try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin", clave("admin"))) {
                 System.out.println("[RESET] " + admin.solicitar("RESET"));
             }
         }
@@ -77,7 +89,7 @@ public class GeneradorCargaConcurrente {
             new Thread(() -> {
                 Random rnd = new Random();
                 List<String> misReservas = new ArrayList<>();
-                try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario)) {
+                try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, clave(usuario))) {
                     // si hay cancelaciones, el cliente cuenta las notificaciones que le llegan
                     if (pctCanc > 0 && !soloConsultas) c.escucharNotificaciones(ipGT, m -> notificaciones.incrementAndGet());
                     long t0Hilo = System.currentTimeMillis();
@@ -132,7 +144,7 @@ public class GeneradorCargaConcurrente {
 
     // pide al GT sus contadores (y los reinicia). Devuelve null si no se pudo
     private static String estadisticasGT(String ipGT) {
-        try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin")) {
+        try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin", clave("admin"))) {
             String r = admin.solicitar("STATS");
             return r.startsWith("EXITO") ? r : null;
         } catch (Exception e) {
