@@ -16,13 +16,13 @@ public class GeneradorCargaConcurrente {
     // contrasenas de prueba de cada usuario (credenciales_clientes.properties, generado por GenerarUsuarios)
     private static final Properties CREDENCIALES = new Properties();
 
-    private static void cargarCredenciales() throws IOException {
+    static void cargarCredenciales() throws IOException {
         File f = new File("credenciales_clientes.properties");
         if (!f.exists()) GenerarUsuarios.main(new String[0]);
         try (FileInputStream in = new FileInputStream(f)) { CREDENCIALES.load(in); }
     }
 
-    private static String clave(String usuario) { return CREDENCIALES.getProperty(usuario, ""); }
+    static String clave(String usuario) { return CREDENCIALES.getProperty(usuario, ""); }
 
     private static final Pattern ID_RESERVA = Pattern.compile("idReserva=(R\\d+)");
 

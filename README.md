@@ -5,7 +5,7 @@ VMs:
 - 10.43.100.138: GT, RMC, Cancelaciones y respaldos
 - 10.43.100.39: clientes y pruebas
 
-Los usuarios son user1 a user8, sin clave. El usuario admin solo lo usan las pruebas para reiniciar los datos y leer los contadores del GT. Los 50 eventos están en el mes 12 (diciembre de 2026). Puertos 5555 a 5565 abiertos entre las VMs. Diagrama de la arquitectura: diagrama_arquitectura_final.png
+Los usuarios son user1 a user8 y admin, todos con contraseña: user1 usa `clave1!`, user2 `clave2!`, ..., user8 `clave8!` y admin `admin123!`. El GT guarda solo el hash SHA-256 en `usuarios.txt` (Nodo 1) y valida usuario y contraseña en cada solicitud, antes de enviarla al RMC o a Cancelaciones; si fallan responde `ERROR;Credenciales invalidas`. El usuario admin solo lo usan las pruebas para reiniciar los datos y leer los contadores del GT. `usuarios.txt` y `credenciales_clientes.properties` se crean con `java -cp out GenerarUsuarios` (`nodo1.sh` lo hace solo si falta `usuarios.txt`; el generador de carga lo hace solo si falta el otro archivo). Los 50 eventos están en el mes 12 (diciembre de 2026). Puertos 5555 a 5565 abiertos entre las VMs. Diagrama de la arquitectura: diagrama_arquitectura_final.png
 
 ## 0. Preparar (en las 3 VMs)
 
@@ -62,10 +62,20 @@ VM 10.43.100.39:
 
 ```bash
 nc -zv 10.43.100.138 5555
-java -cp out:jeromq-0.5.3.jar ClienteInteractivo 10.43.100.138 user1
+java -cp out:jeromq-0.5.3.jar ClienteInteractivo 10.43.100.138 user1 'clave1!'
 ```
 
-Abre un menú para consultar (mes 12), reservar, modificar y cancelar. La cancelación responde un ACK y luego llega una notificación. Cambia `datos/` en la VM 10.43.99.202.
+Si no se pasa la clave como tercer argumento, la pide por consola. Abre un menú para consultar (mes 12), reservar, modificar y cancelar. La cancelación responde un ACK y luego llega una notificación. Cambia `datos/` en la VM 10.43.99.202.
+
+## 2b. Prueba funcional automática
+
+VM 10.43.100.39:
+
+```bash
+./prueba_funcional.sh 10.43.100.138
+```
+
+Reinicia los datos y corre 20 casos: consultas, reservas, rechazos, modificación de asientos y de fecha, evento de una sola ocurrencia, titularidad, clave incorrecta, solicitud repetida, cancelación asíncrona con notificación y 8 clientes pidiendo más asientos de los que hay (sin sobreventa). Imprime `[OK]` o `[FALLA]` por caso y deja `resultados/prueba_funcional.txt`. Hay que correrla con la arquitectura base o la escalable arriba; para el informe sirve el resultado de cualquiera de las dos.
 
 ## 3. Carga con el cliente masivo
 
@@ -163,4 +173,4 @@ Generar los gráficos (necesita `pip install matplotlib`):
 python3 graficar.py resultados/base_<fecha> resultados/escalable_<fecha> graficos
 ```
 
-Deja los gráficos de tiempo y TPM por número de clientes y `tabla_comparativa.csv`.
+Deja los gráficos de tiempo y TPM por número de clientes, `tabla_resultados.md` (la tabla del informe, con el formato de la Tabla 1 del enunciado) y `tabla_comparativa.csv` (cambio porcentual entre base y escalable).

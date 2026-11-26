@@ -48,7 +48,12 @@ public class ClienteBase implements AutoCloseable {
 
     // Envia una solicitud al GT (ej. "RESERVA;E3;1;2") con usuario y clave, y espera la respuesta
     public String solicitar(String comando) {
-        String payload = nuevoId() + ";" + usuario + ";" + clave + ";" + comando;
+        return solicitarConId(nuevoId(), comando);
+    }
+
+    // Igual que solicitar, pero con el identificador indicado (sirve para probar solicitudes repetidas)
+    public String solicitarConId(String idSolicitud, String comando) {
+        String payload = idSolicitud + ";" + usuario + ";" + clave + ";" + comando;
         for (int intento = 0; intento <= REINTENTOS; intento++) {
             req.send(payload);
             String r = req.recvStr(0);

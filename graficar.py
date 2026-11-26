@@ -32,6 +32,41 @@ def tpm_gt(carpeta):
     return d
 
 
+def conteos(carpeta):
+    # {(operacion, clientes): (total, exitosas)}
+    d = {}
+    for r in leer(carpeta, "resumen_velocidad.csv"):
+        d[(r["Operacion"], int(r["Clientes"]))] = (int(r["Total"]), int(r["Exitosas"]))
+    return d
+
+
+def tabla_resultados(salida, clientes, arquitecturas):
+    # arquitecturas: lista de (nombre, tiempos, tpm, conteos). Deja la tabla del informe en .md y .csv
+    cab = ["Clientes", "Arquitectura", "Consulta prom (ms)", "Consulta desv (ms)", "Reserva prom (ms)",
+           "Reserva desv (ms)", "TPM consultas", "TPM reservas", "Reservas exitosas / total"]
+    filas = []
+    for n in clientes:
+        for nombre, t, g, c in arquitecturas:
+            cons, res = t.get(("consulta", n)), t.get(("reserva", n))
+            cr = c.get(("reserva", n))
+            filas.append([
+                n, nombre,
+                "%.1f" % cons[0] if cons else "-", "%.1f" % cons[1] if cons else "-",
+                "%.1f" % res[0] if res else "-", "%.1f" % res[1] if res else "-",
+                "%.0f" % g[("consultas", n)] if ("consultas", n) in g else "-",
+                "%.0f" % g[("reservas", n)] if ("reservas", n) in g else "-",
+                "%d / %d" % (cr[1], cr[0]) if cr else "-"])
+    with open(os.path.join(salida, "tabla_resultados.csv"), "w", newline="") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(cab)
+        w.writerows(filas)
+    with open(os.path.join(salida, "tabla_resultados.md"), "w") as f:
+        f.write("| " + " | ".join(cab) + " |\n")
+        f.write("|" + "---|" * len(cab) + "\n")
+        for fila in filas:
+            f.write("| " + " | ".join(str(x) for x in fila) + " |\n")
+
+
 def serie(d, op, clientes):
     return [d.get((op, n)) for n in clientes]
 
@@ -90,6 +125,11 @@ def main():
     fig_todos.tight_layout()
     fig_todos.savefig(os.path.join(salida, "comparacion_completa.png"), dpi=150)
 
+    # tabla con el formato de la Tabla 1 del enunciado (para pegar en el informe)
+    tabla_resultados(salida, clientes, [
+        ("Base", t_base, g_base, conteos(dir_base)),
+        ("Escalable", t_esc, g_esc, conteos(dir_esc))])
+
     # tabla comparativa con el porcentaje de mejora
     with open(os.path.join(salida, "tabla_comparativa.csv"), "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
@@ -102,7 +142,7 @@ def main():
                 ve = ve[0] if err else ve
                 cambio = (ve - vb) / vb * 100 if vb else 0
                 w.writerow([titulo, n, round(vb, 2), round(ve, 2), round(cambio, 1)])
-    print("Graficos y tabla guardados en", salida)
+    print("Graficos y tablas guardados en", salida)
 
 
 if __name__ == "__main__":
