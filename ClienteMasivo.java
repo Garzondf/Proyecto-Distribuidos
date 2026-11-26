@@ -4,6 +4,7 @@ import java.util.Properties;
 // Cliente masivo por consola: lanza muchos clientes con los argumentos que se le pasen
 public class ClienteMasivo {
 
+    // imprime las opciones
     static void ayuda() {
         System.out.println("Uso: java ClienteMasivo [opciones]");
         System.out.println("  --config archivo     archivo .properties base (los demas argumentos lo sobreescriben)");
@@ -15,6 +16,7 @@ public class ClienteMasivo {
         System.out.println("  --reservas P         % de reservas                          (por defecto 40)");
         System.out.println("  --modificaciones P   % de modificaciones                    (por defecto 20)");
         System.out.println("  --cancelaciones P    % de cancelaciones                     (por defecto 0)");
+        System.out.println("  --mes M              mes que se consulta, donde estan los eventos (por defecto 12)");
         System.out.println("  --salida carpeta     carpeta donde se guardan los CSV       (por defecto .)");
         System.out.println("  --reset              reinicia los datos de Persistencia antes de empezar");
         System.out.println("  --admin-pass clave   clave del usuario admin para --reset   (por defecto admin123)");
@@ -22,6 +24,7 @@ public class ClienteMasivo {
         System.out.println("Ejemplo: java -cp out:jeromq-0.5.3.jar ClienteMasivo --ip 10.43.100.138 --clientes 8 --duracion 60 --reset");
     }
 
+    // lee los argumentos y lanza la prueba de carga
     public static void main(String[] args) throws Exception {
         if (args.length == 0) { ayuda(); return; }
         Properties cfg = new Properties();
@@ -59,6 +62,7 @@ public class ClienteMasivo {
             case "--reservas": return "porcentajeReservas";
             case "--modificaciones": return "porcentajeModificaciones";
             case "--cancelaciones": return "porcentajeCancelaciones";
+            case "--mes": return "mesConsulta";
             case "--salida": return "salida";
             case "--admin-pass": return "adminPass";
             default: return null;

@@ -4,6 +4,7 @@ import org.zeromq.ZMQ;
 
 // Cancelaciones: recibe la cancelacion del GT, la manda a Persistencia y avisa al cliente
 public class ServicioCancelaciones {
+    // recibe cancelaciones, las manda a Persistencia y publica el resultado
     public static void main(String[] args) {
         String ipPers = args.length > 0 ? args[0] : "10.43.99.202";
         try (ZContext context = new ZContext()) {

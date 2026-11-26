@@ -8,6 +8,7 @@ import java.util.List;
 
 // RMC: recibe pedidos del GT y los manda a Persistencia
 public class ServicioRMC {
+    // atiende pedidos del GT y los manda a Persistencia
     public static void main(String[] args) {
         List<String> a = new ArrayList<>(Arrays.asList(args));
         boolean respaldo = a.remove("--respaldo");

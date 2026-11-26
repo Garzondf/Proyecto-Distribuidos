@@ -69,6 +69,7 @@ public class Util {
         System.out.println("##################################################\n");
     }
 
+    // socket REQ de 1 s de timeout para el PING
     private static ZMQ.Socket nuevoReq(ZContext ctx, String ip, int puerto) {
         ZMQ.Socket s = ctx.createSocket(SocketType.REQ);
         s.setReceiveTimeOut(1000);

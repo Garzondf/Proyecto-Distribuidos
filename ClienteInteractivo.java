@@ -2,6 +2,7 @@ import java.util.Scanner;
 
 // Cliente por consola: menu para consultar, reservar, modificar y cancelar
 public class ClienteInteractivo {
+    // pide usuario y clave y muestra el menu
     public static void main(String[] args) {
         String ipGT = args.length > 0 ? args[0] : "10.43.100.138";
         String usuario = args.length > 1 ? args[1] : "user1";
@@ -60,6 +61,7 @@ public class ClienteInteractivo {
         }
     }
 
+    // imprime la respuesta del sistema
     private static void mostrar(String r) {
         System.out.println("\n--- RESPUESTA ---\n" + r.replaceFirst(";", ": "));
     }

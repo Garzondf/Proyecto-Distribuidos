@@ -36,6 +36,7 @@ public class ServicioPersistencia {
     private int contadorReservas = 0;
     private volatile List<Evento> replica = new ArrayList<>();
 
+    // carga los archivos (o los crea si no existen)
     public ServicioPersistencia(String dirDatos, boolean reset) throws IOException {
         this.dir = Paths.get(dirDatos);
         this.dirReplica = dir.resolve("replica");
@@ -47,15 +48,15 @@ public class ServicioPersistencia {
 
     // ---- archivos
 
+    // deja los archivos como al inicio
     private void inicializar() throws IOException {
-        // crea 50 eventos (E1..E20 con 2 fechas) con 100 asientos cada uno
+        // crea 50 eventos en diciembre de 2026 (E1..E20 con dos fechas) con 100 asientos cada uno
         List<String> ev = new ArrayList<>();
         for (int i = 1; i <= 50; i++) {
-            int mes = ((i - 1) % 12) + 1;
             int ocs = (i <= 20) ? 2 : 1;
             for (int o = 1; o <= ocs; o++) {
-                String fecha = String.format("2027-%02d-%02d", mes, o == 1 ? 5 : 20);
-                ev.add(new Evento("E" + i, o, fecha, 100, 100, 0).linea());
+                int dia = ((i - 1) % 14) + (o == 1 ? 1 : 15);   // 1ra ocurrencia dias 1-14, 2da dias 15-28
+                ev.add(new Evento("E" + i, o, String.format("2026-12-%02d", dia), 100, 100, 0).linea());
             }
         }
         escribirAtomico(dir.resolve("eventos.txt"), ev);
@@ -64,6 +65,7 @@ public class ServicioPersistencia {
         System.out.println("[Persistencia] Archivos inicializados en " + dir.toAbsolutePath());
     }
 
+    // lee los archivos y los pasa a memoria
     private void cargar() throws IOException {
         eventos.clear(); reservas.clear(); solicitudes.clear(); contadorReservas = 0;
         for (String l : leer("eventos.txt")) {
@@ -84,6 +86,7 @@ public class ServicioPersistencia {
         }
     }
 
+    // lee las lineas de un archivo
     private List<String> leer(String nombre) throws IOException {
         List<String> out = new ArrayList<>();
         for (String l : Files.readAllLines(dir.resolve(nombre), StandardCharsets.UTF_8))
@@ -102,6 +105,7 @@ public class ServicioPersistencia {
         }
     }
 
+    // escribe los archivos con los datos actuales
     private void guardar(boolean datos) throws IOException {
         if (datos) {
             List<String> ev = new ArrayList<>(), rs = new ArrayList<>();
@@ -192,6 +196,7 @@ public class ServicioPersistencia {
         return res;
     }
 
+    // lista las ocurrencias de un mes (0 = todas)
     private String consultar(List<Evento> lista, String mes) {
         int m = Integer.parseInt(mes.trim().isEmpty() ? "0" : mes.trim());
         StringBuilder sb = new StringBuilder();
@@ -204,6 +209,7 @@ public class ServicioPersistencia {
         return "EXITO;" + n + " ocurrencias" + (m != 0 ? " en el mes " + m : "") + "\n" + sb;
     }
 
+    // RESERVA;evento;ocurrencia;asientos
     private String reservar(String usuario, String[] p) {
         String ev = p[3]; int oc = Integer.parseInt(p[4]); int n = Integer.parseInt(p[5]);
         Evento e = eventos.get(ev + "#" + oc);
@@ -217,6 +223,7 @@ public class ServicioPersistencia {
         return "EXITO;Reserva idReserva=" + id + " confirmada: " + ev + " oc" + oc + ", " + n + " asiento(s), libres restantes " + e.libres;
     }
 
+    // MODIFICA;idReserva;nuevosAsientos;nuevaOcurrencia
     private String modificar(String usuario, String[] p) {
         Reserva r = reservas.get(p[3]);
         int nuevaCant = Integer.parseInt(p[4]);   // 0 = dejar igual
@@ -242,6 +249,7 @@ public class ServicioPersistencia {
         return "EXITO;Reserva idReserva=" + r.id + " modificada: " + r.evento + " oc" + oc + " (" + destino.fecha + "), " + cant + " asiento(s)";
     }
 
+    // CANCELA;idReserva
     private String cancelar(String usuario, String[] p) {
         Reserva r = reservas.get(p[3]);
         if (r == null) return "RECHAZADO;La reserva " + p[3] + " no existe";
@@ -254,6 +262,7 @@ public class ServicioPersistencia {
 
     // ---- verificacion
 
+    // imprime los totales y revisa que no haya sobreventa
     public synchronized void imprimirResumen(String titulo) {
         int tot = 0, lib = 0, ocu = 0, sumaReservas = 0; boolean ok = true;
         int dos = 0; Set<String> ids = new HashSet<>(); Map<String, Integer> oc = new HashMap<>();
@@ -276,6 +285,7 @@ public class ServicioPersistencia {
 
     // ---- red
 
+    // abre los puertos y atiende los pedidos
     public void iniciar(int puerto, int puertoReplica) {
         // hilo de la replica: solo responde consultas
         Thread hiloReplica = new Thread(() -> {
@@ -318,6 +328,7 @@ public class ServicioPersistencia {
         }
     }
 
+    // arranque: --reset deja los datos como al inicio
     public static void main(String[] args) throws IOException {
         List<String> a = new ArrayList<>(Arrays.asList(args));
         boolean reset = a.remove("--reset");

@@ -9,6 +9,7 @@ import java.util.Map;
 // Seguridad: hash SHA-256 y validacion de usuarios
 public class Seguridad {
 
+    // convierte un texto en su hash SHA-256
     public static String sha256(String texto) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -38,6 +39,7 @@ public class Seguridad {
         return usuarios;
     }
 
+    // true si el usuario existe y la clave coincide
     public static boolean validar(Map<String, String> usuarios, String usuario, String password) {
         String hash = usuarios.get(usuario);
         // compara el hash de la clave con el guardado

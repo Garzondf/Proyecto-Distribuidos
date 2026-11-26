@@ -19,10 +19,15 @@ public class GestorTransacciones {
     private static final AtomicInteger reservas = new AtomicInteger();
     private static final AtomicInteger modificaciones = new AtomicInteger();
     private static final AtomicInteger cancelaciones = new AtomicInteger();
+    // contadores de la ventana de medicion (se leen y se reinician con STATS)
+    private static final AtomicInteger medC = new AtomicInteger(), medR = new AtomicInteger(),
+            medM = new AtomicInteger(), medX = new AtomicInteger();
+    private static volatile long inicioMedicion = System.currentTimeMillis();
     // totales para el modo demo
     private static final AtomicInteger totC = new AtomicInteger(), totR = new AtomicInteger(),
             totM = new AtomicInteger(), totX = new AtomicInteger(), totRechazadas = new AtomicInteger();
 
+    // abre los puertos y atiende pedidos en un ciclo
     public static void main(String[] args) {
         List<String> a = new ArrayList<>(Arrays.asList(args));
         boolean respaldo = a.remove("--respaldo");
@@ -83,6 +88,11 @@ public class GestorTransacciones {
                         continue;
                     }
                     String cmd = p[3];
+                    // STATS: el admin pide los contadores de la ventana de medicion (no se reenvia)
+                    if (cmd.equals("STATS")) {
+                        responder(front, id, true, p[1].equals("admin") ? estadisticas() : "ERROR;Solo admin");
+                        continue;
+                    }
                     String reenviar = reenvio(p);
                     contar(cmd);
                     System.out.println("[GT] " + cmd + " de " + p[1] + " (" + p[0] + ") -> RMC");
@@ -116,6 +126,7 @@ public class GestorTransacciones {
                     if (enviado) {
                         cancelaciones.incrementAndGet();
                         totX.incrementAndGet();
+                        medX.incrementAndGet();
                         System.out.println("[GT] CANCELA de " + p[1] + " (" + p[0] + ") -> Cancelaciones. ACK enviado");
                         responder(canc, id, false, "ACK;" + p[0] + ";Cancelacion recibida, se notificara el resultado");
                     } else {
@@ -133,6 +144,7 @@ public class GestorTransacciones {
         return sb.toString();
     }
 
+    // responde al cliente que envio el pedido
     private static void responder(ZMQ.Socket s, ZFrame id, boolean conVacio, String texto) {
         ZMsg out = new ZMsg();
         out.add(id);
@@ -141,13 +153,23 @@ public class GestorTransacciones {
         out.send(s);
     }
 
+    // suma la operacion al contador de su tipo
     private static void contar(String cmd) {
         switch (cmd) {
-            case "CONSULTA": consultas.incrementAndGet(); totC.incrementAndGet(); break;
-            case "RESERVA": reservas.incrementAndGet(); totR.incrementAndGet(); break;
-            case "MODIFICA": modificaciones.incrementAndGet(); totM.incrementAndGet(); break;
+            case "CONSULTA": consultas.incrementAndGet(); totC.incrementAndGet(); medC.incrementAndGet(); break;
+            case "RESERVA": reservas.incrementAndGet(); totR.incrementAndGet(); medR.incrementAndGet(); break;
+            case "MODIFICA": modificaciones.incrementAndGet(); totM.incrementAndGet(); medM.incrementAndGet(); break;
             default: break;
         }
+    }
+
+    // devuelve los contadores desde la ultima vez y los reinicia
+    private static String estadisticas() {
+        long ahora = System.currentTimeMillis();
+        long seg = Math.max(1, (ahora - inicioMedicion) / 1000);
+        inicioMedicion = ahora;
+        return "EXITO;consultas=" + medC.getAndSet(0) + ";reservas=" + medR.getAndSet(0)
+                + ";modificaciones=" + medM.getAndSet(0) + ";cancelaciones=" + medX.getAndSet(0) + ";segundos=" + seg;
     }
 
     // Demo: imprime los totales cada 5 s
@@ -168,6 +190,7 @@ public class GestorTransacciones {
         t.start();
     }
 
+    // cada minuto imprime y guarda las transacciones por minuto
     private static void iniciarMonitorTPM() {
         Thread t = new Thread(() -> {
             int minuto = 0;

@@ -4,6 +4,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,6 +35,7 @@ public class GeneradorCargaConcurrente {
         int pctRes = Integer.parseInt(cfg.getProperty("porcentajeReservas", "40"));
         int pctMod = Integer.parseInt(cfg.getProperty("porcentajeModificaciones", "20"));
         int pctCanc = Integer.parseInt(cfg.getProperty("porcentajeCancelaciones", "0"));
+        int mes = Integer.parseInt(cfg.getProperty("mesConsulta", "12"));   // mes donde estan los 50 eventos
         String salida = cfg.getProperty("salida", ".");
         boolean resetAntes = Boolean.parseBoolean(cfg.getProperty("resetAntes", "false"));
         String adminPass = cfg.getProperty("adminPass", "admin123");
@@ -59,6 +61,10 @@ public class GeneradorCargaConcurrente {
             }
         }
 
+        // pone en cero los contadores del GT para medir solo esta prueba
+        estadisticasGT(ipGT, adminPass);
+        AtomicInteger notificaciones = new AtomicInteger();
+
         List<Registro> registros = Collections.synchronizedList(new ArrayList<>());
         CountDownLatch fin = new CountDownLatch(n);
         long inicioGlobal = System.currentTimeMillis();
@@ -74,13 +80,15 @@ public class GeneradorCargaConcurrente {
                 Random rnd = new Random();
                 List<String> misReservas = new ArrayList<>();
                 try (ClienteBase c = new ClienteBase(ipGT, 5555, 5556, usuario, password)) {
+                    // si hay cancelaciones, el cliente cuenta las notificaciones que le llegan
+                    if (pctCanc > 0 && !soloConsultas) c.escucharNotificaciones(ipGT, m -> notificaciones.incrementAndGet());
                     long t0Hilo = System.currentTimeMillis();
                     while (System.currentTimeMillis() - t0Hilo < duracion * 1000L) {
                         long ini = System.currentTimeMillis();
                         int dado = rnd.nextInt(100);   // escoge el tipo de operacion
                         String tipo, cmd = null;
                         if (soloConsultas || dado < pctCons) {
-                            tipo = "consulta"; cmd = "CONSULTA;" + (rnd.nextInt(12) + 1);
+                            tipo = "consulta"; cmd = "CONSULTA;" + mes;
                         } else if (dado < pctCons + pctRes || misReservas.isEmpty()) {
                             tipo = "reserva";
                             cmd = "RESERVA;E" + (rnd.nextInt(50) + 1) + ";" + (rnd.nextInt(2) + 1) + ";" + (rnd.nextInt(3) + 1);
@@ -107,6 +115,7 @@ public class GeneradorCargaConcurrente {
                         long resto = intervaloMs - (System.currentTimeMillis() - ini);
                         if (resto > 0) Thread.sleep(resto);
                     }
+                    if (pctCanc > 0) Thread.sleep(2000);   // espera las ultimas notificaciones
                 } catch (Exception e) {
                     System.err.println("Error en cliente " + idx + ": " + e);
                 } finally {
@@ -117,9 +126,44 @@ public class GeneradorCargaConcurrente {
 
         fin.await();
         double minutos = (System.currentTimeMillis() - inicioGlobal) / 60000.0;
+        String statsGT = estadisticasGT(ipGT, adminPass);   // contadores del GT durante la prueba
         reportar(registros, n, minutos, salida);
+        reportarGT(statsGT, n, salida);
+        if (pctCanc > 0) System.out.println("Notificaciones de cancelacion recibidas: " + notificaciones.get());
     }
 
+    // pide al GT sus contadores (y los reinicia). Devuelve null si no se pudo
+    private static String estadisticasGT(String ipGT, String adminPass) {
+        try (ClienteBase admin = new ClienteBase(ipGT, 5555, 5556, "admin", adminPass)) {
+            String r = admin.solicitar("STATS");
+            return r.startsWith("EXITO") ? r : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // guarda el TPM medido en el GT (transacciones procesadas por minuto)
+    private static void reportarGT(String stats, int n, String salida) throws IOException {
+        if (stats == null) { System.out.println("Aviso: no se pudieron leer los contadores del GT (falta el usuario admin)"); return; }
+        Map<String, Long> v = new HashMap<>();
+        for (String par : stats.substring(stats.indexOf(';') + 1).split(";")) {
+            String[] kv = par.split("=");
+            v.put(kv[0], Long.parseLong(kv[1]));
+        }
+        double seg = Math.max(1, v.get("segundos"));
+        String archivo = salida + File.separator + "tpm_gt_" + n + "_clientes.csv";
+        System.out.println("\nTPM medido en el GT (" + (long) seg + " s):");
+        try (FileWriter w = new FileWriter(archivo)) {
+            w.write("Clientes,Operacion,Total_GT,Segundos,TPM_GT\n");
+            for (String tipo : new String[]{"consultas", "reservas", "modificaciones", "cancelaciones"}) {
+                double tpm = v.get(tipo) * 60.0 / seg;
+                System.out.printf("  %-15s total=%d TPM=%.2f%n", tipo, v.get(tipo), tpm);
+                w.write(String.format(Locale.US, "%d,%s,%d,%d,%.2f%n", n, tipo, v.get(tipo), (long) seg, tpm));
+            }
+        }
+    }
+
+    // calcula promedio, desviacion y TPM de los clientes y guarda los CSV
     private static void reportar(List<Registro> regs, int n, double minutos, String salida) throws IOException {
         // CSV con el tiempo de cada operacion
         String detalle = salida + File.separator + "tiempos_" + n + "_clientes.csv";

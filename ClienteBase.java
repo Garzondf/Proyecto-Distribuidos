@@ -15,6 +15,7 @@ public class ClienteBase implements AutoCloseable {
     private final int puertoSync, puertoCancel;
     private ZMQ.Socket req, dealer;
 
+    // crea los sockets hacia el GT (5555 consultas/reservas, 5556 cancelaciones)
     public ClienteBase(String ip, int puertoSync, int puertoCancel, String usuario, String password) {
         this.ip = ip; this.puertoSync = puertoSync; this.puertoCancel = puertoCancel;
         this.usuario = usuario; this.password = password;
@@ -22,6 +23,7 @@ public class ClienteBase implements AutoCloseable {
         dealer = abrirDealer();
     }
 
+    // abre el socket de solicitudes con timeout
     private ZMQ.Socket abrirReq() {
         ZMQ.Socket s = ctx.createSocket(SocketType.REQ);
         s.setReceiveTimeOut(TIMEOUT_MS);
@@ -30,6 +32,7 @@ public class ClienteBase implements AutoCloseable {
         return s;
     }
 
+    // abre el socket de cancelaciones con timeout
     private ZMQ.Socket abrirDealer() {
         ZMQ.Socket s = ctx.createSocket(SocketType.DEALER);
         s.setReceiveTimeOut(TIMEOUT_MS);
@@ -38,6 +41,7 @@ public class ClienteBase implements AutoCloseable {
         return s;
     }
 
+    // identificador unico de la solicitud, sirve para no repetir operaciones
     private String nuevoId() {
         return usuario + "-" + UUID.randomUUID().toString().substring(0, 12);
     }
@@ -95,6 +99,7 @@ public class ClienteBase implements AutoCloseable {
     }
 
     @Override
+    // cierra los sockets
     public void close() {
         ctx.close();
     }
